@@ -1,15 +1,15 @@
-// src/controllers/groups.controller.js
-import { Group } from '../models/Groups.js'; // Note the .js extension and named import
-import { User } from '../models/Users.js'; // Note the .js extension and named import
-import Career from '../models/Career.js'; // Note the .js extension
-import { createTelegramGroup, addTelegramGroupMembers } from '../services/telegram.js'; // Import Airgram service
+// src/controllers/groups.controller.js (Updated)
+import { Group } from '../models/Groups.js';
+import { User } from '../models/Users.js';
+import Career from '../models/Career.js';
+import { createTelegramGroup } from '../services/telegram.js'; // Only import createTelegramGroup
 
 // @desc    Find or create a study group for a specific subject
 // @route   POST /api/groups/find-or-create
 // @access  Private (requires JWT auth)
 const findOrCreateGroup = async (req, res) => {
   const { subjectName, desiredSemesterNumber } = req.body;
-  const currentUser = req.user; // User attached by protect middleware
+  const currentUser = req.user;
 
   if (!subjectName) {
     return res.status(400).json({ message: 'Subject name is required.' });
@@ -19,8 +19,6 @@ const findOrCreateGroup = async (req, res) => {
       return res.status(400).json({ message: 'User profile incomplete. Please set your career and current semester first.' });
   }
 
-  // Determine the semester to search/create for
-  // If desiredSemesterNumber is provided, use it, otherwise use currentSemesterNumber
   const targetSemester = desiredSemesterNumber || currentUser.currentSemesterNumber;
 
   try {
@@ -31,18 +29,25 @@ const findOrCreateGroup = async (req, res) => {
       semesterNumber: targetSemester,
       members: { $ne: currentUser._id } // User not already a member
     })
-    .populate('members', 'username first_name last_name') // Populate members for display, matching User model
-    .sort({ createdAt: -1 }) // Newest first
-    .lean(); // Return plain JS objects for modification if needed
+    .populate('members', 'username first_name last_name')
+    .sort({ createdAt: -1 })
+    .lean();
 
-    const MAX_GROUP_SIZE = 10; // Define your max group size
+    const MAX_GROUP_SIZE = 10;
     existingGroups = existingGroups.filter(group => group.members.length < MAX_GROUP_SIZE);
 
     if (existingGroups.length > 0) {
       // Found existing groups, return them
+      // Include the invite link if available
       return res.status(200).json({
         message: `Found ${existingGroups.length} existing groups for "${subjectName}" in Semester ${targetSemester}.`,
-        groups: existingGroups,
+        groups: existingGroups.map(group => ({
+          ...group,
+          // If you want to only send the link if the user is a member, add conditional logic here.
+          // For now, sending to allow users to see links before joining.
+          // Or you can fetch it only after they confirm joining.
+          telegramInviteLink: group.telegramInviteLink // Include the link in the response
+        })),
         action: 'found'
       });
     }
@@ -50,7 +55,6 @@ const findOrCreateGroup = async (req, res) => {
     // 2. No suitable groups found, automatically create a new one
     console.log(`No existing groups for "${subjectName}" (Semester ${targetSemester}) in ${currentUser.career}. Creating a new one...`);
 
-    // Fetch the career name for the group name
     const careerObj = await Career.findById(currentUser.career);
     const careerName = careerObj ? careerObj.name : 'Unknown Career';
 
@@ -64,42 +68,39 @@ const findOrCreateGroup = async (req, res) => {
       description: `A study group for ${subjectName} in ${careerName}, Semester ${targetSemester}.`
     });
 
-    await newGroup.save();
-
-    // Add group to user's studyGroups list
-    currentUser.studyGroups.push(newGroup._id);
-    await currentUser.save();
-
-    // 3. Attempt to create a Telegram Group
+    // 3. Attempt to create a Telegram Group and get an invite link
     let telegramChatId = null;
+    let telegramInviteLink = null;
     let telegramErrorOccurred = false;
     try {
-      // Pass the currentUser's Telegram ID to potentially add them to the group
-      // createTelegramGroup will need to resolve this to an actual TDLib user ID
-      const telegramGroupChat = await createTelegramGroup(
-        groupName,
-        [currentUser.telegramId] // Pass Telegram ID of the creator
-      );
+      const tgGroupDetails = await createTelegramGroup(groupName);
 
-      if (telegramGroupChat && telegramGroupChat.id) {
-        telegramChatId = telegramGroupChat.id;
-        newGroup.telegramChatId = String(telegramChatId); // Store as string
-        await newGroup.save(); // Update group with Telegram chat ID
-        console.log(`Telegram group created: "${groupName}" (ID: ${telegramChatId})`);
+      if (tgGroupDetails && tgGroupDetails.chatId) {
+        telegramChatId = tgGroupDetails.chatId;
+        telegramInviteLink = tgGroupDetails.inviteLink; // Get the invite link
+        newGroup.telegramChatId = telegramChatId;
+        newGroup.telegramInviteLink = telegramInviteLink; // Save the invite link
+        console.log(`Telegram group created: "${groupName}" (ID: ${telegramChatId}, Link: ${telegramInviteLink})`);
       } else {
          console.warn('createTelegramGroup returned no chat ID, Telegram group might not be created.');
          telegramErrorOccurred = true;
       }
 
     } catch (telegramError) {
-      console.error('Error creating Telegram group:', telegramError.message);
+      console.error('Error creating Telegram group or invite link:', telegramError.message);
       telegramErrorOccurred = true;
     }
 
-    // Return the newly created group
+    await newGroup.save(); // Save the group with Telegram details
+
+    // Add group to user's studyGroups list
+    currentUser.studyGroups.push(newGroup._id);
+    await currentUser.save();
+
+    // Return the newly created group with its invite link
     if (telegramErrorOccurred) {
         res.status(201).json({
-            message: `New group created for "${subjectName}", but Telegram group creation failed.`,
+            message: `New group created for "${subjectName}", but Telegram group creation or link generation failed.`,
             group: newGroup.toObject(),
             action: 'created_with_telegram_error'
         });
@@ -135,7 +136,7 @@ const joinGroup = async (req, res) => {
       return res.status(400).json({ message: 'You are already a member of this group.' });
     }
 
-    const MAX_GROUP_SIZE = 10; // Define your max group size
+    const MAX_GROUP_SIZE = 10;
     if (group.members.length >= MAX_GROUP_SIZE) {
       return res.status(400).json({ message: 'This group is full.' });
     }
@@ -146,20 +147,13 @@ const joinGroup = async (req, res) => {
     currentUser.studyGroups.push(group._id);
     await currentUser.save();
 
-    // Attempt to add user to Telegram group if it exists
-    if (group.telegramChatId) {
-      try {
-        await addTelegramGroupMembers(group.telegramChatId, [currentUser.telegramId]);
-        console.log(`Added user ${currentUser.username} to Telegram chat ${group.telegramChatId}`);
-      } catch (tgError) {
-        console.warn(`Failed to add user to Telegram chat ${group.telegramChatId}:`, tgError.message);
-        // Log but don't fail the HTTP request if Telegram part fails
-      }
-    }
+    // REMOVED: No more programmatic adding to Telegram group.
+    // The frontend should now present the `group.telegramInviteLink` to the user
+    // and instruct them to join via that link.
 
     res.status(200).json({
       message: `Successfully joined group "${group.name}".`,
-      group: group.toObject()
+      group: group.toObject() // Return the updated group object, which now contains the invite link
     });
 
   } catch (error) {
@@ -177,7 +171,7 @@ const getMyGroups = async (req, res) => {
       path: 'studyGroups',
       populate: {
         path: 'members',
-        select: 'username first_name last_name telegramId' // Select fields for members
+        select: 'username first_name last_name telegramId'
       }
     });
 
