@@ -57,10 +57,8 @@ export const scrapeCollegeData = async (url, debug = false) => {
       const cardElements = document.querySelectorAll('.card-container');
       const semesterElements = [...cardElements].filter(semesterEl => /semestre/i.test(semesterEl.children[0].textContent));
 
-      console.log(cardElements[2])
-
       
-      // Example selectors (REPLACE WITH YOUR ACTUAL SELECTORS)
+      // Selectors
 
        semesterElements.forEach((semesterEl, index) => {
          const semesterNumber = index + 1;
@@ -77,11 +75,6 @@ export const scrapeCollegeData = async (url, debug = false) => {
          semesters.push({ number: semesterNumber, name: semesterName, subjects: subjects });
        });
 
-       console.log(semesters)
-
-
-      // --- Mock data for demonstration (REPLACE THIS WITH YOUR ACTUAL SCRAPING) ---
-      // This mock data uses the `careerName` derived from the title.
       return {
         name: careerName, // Use the dynamically scraped careerName
         semesters
