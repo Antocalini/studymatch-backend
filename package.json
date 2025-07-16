@@ -22,6 +22,7 @@
     "jsonwebtoken": "^9.0.2",
     "mongoose": "^8.16.3",
     "prebuilt-tdlib": "^0.1008051.0",
+    "puppeteer": "^24.14.0",
     "tdl": "^8.0.2"
   },
   "devDependencies": {

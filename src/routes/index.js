@@ -3,6 +3,8 @@ import express from 'express';
 import authRoutes from './auth.routes.js'; // Note the .js extension
 import groupsRoutes from './groups.routes.js'; // Note the .js extension
 import userRoutes from './user.routes.js'; // Note the .js extension
+import careerRoutes from './career.routes.js';
+import scrapeRoutes from './scrape.routes.js'; // NEW: Import scrape routes
 
 const router = express.Router();
 
@@ -10,6 +12,9 @@ const router = express.Router();
 router.use('/auth', authRoutes);
 router.use('/groups', groupsRoutes);
 router.use('/users', userRoutes);
+router.use('/careers', careerRoutes);
+router.use('/scrape', scrapeRoutes); // NEW: Mount scrape routes
+
 
 // You can add more routes here for other resources if needed
 
