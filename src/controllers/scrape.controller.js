@@ -1,6 +1,6 @@
-// src/controllers/scrape.controller.js
+// src/controllers/scrape.controller.js (Updated)
 import { scrapeCollegeData } from '../services/scraper.js';
-import Career from '../models/Career.js'; // To save the scraped data
+import Career from '../models/Career.js'; // Still needed for the other endpoint
 
 // @desc    Trigger the college website scraper and save data to DB
 // @route   POST /api/scrape/college-data
@@ -21,29 +21,24 @@ export const triggerCollegeDataScrape = async (req, res) => {
     }
 
     // --- Save scraped data to MongoDB ---
-    // This logic assumes the scraped data matches the structure of your Career model.
-    // It will attempt to insert or update careers.
     const results = [];
     for (const careerData of scrapedCareers) {
       try {
-        // Try to find an existing career by name
         let existingCareer = await Career.findOne({ name: careerData.name });
 
         if (existingCareer) {
-          // If career exists, update its semesters (this will replace the entire semesters array)
           existingCareer.semesters = careerData.semesters;
           await existingCareer.save();
           results.push({ name: careerData.name, status: 'updated', id: existingCareer._id });
           console.log(`[Scrape Controller] Updated existing career: ${careerData.name}`);
         } else {
-          // If career does not exist, create a new one
           const newCareer = new Career(careerData);
           await newCareer.save();
           results.push({ name: careerData.name, status: 'created', id: newCareer._id });
           console.log(`[Scrape Controller] Created new career: ${careerData.name}`);
         }
       } catch (dbError) {
-        if (dbError.code === 11000) { // Duplicate key error
+        if (dbError.code === 11000) {
             console.warn(`[Scrape Controller] Duplicate career name found during save: ${careerData.name}. Skipping.`);
             results.push({ name: careerData.name, status: 'skipped_duplicate' });
         } else {
@@ -62,5 +57,37 @@ export const triggerCollegeDataScrape = async (req, res) => {
   } catch (error) {
     console.error('[Scrape Controller] Error triggering scrape:', error);
     res.status(500).json({ message: 'Failed to trigger scraping process.', error: error.message });
+  }
+};
+
+
+// @desc    Trigger the college website scraper and return data without saving to DB
+// @route   POST /api/scrape/preview-college-data
+// @access  Private (Admin only)
+export const previewCollegeDataScrape = async (req, res) => {
+  const { url } = req.body; // Expect the URL to scrape from the request body
+
+  if (!url) {
+    return res.status(400).json({ message: 'Scraping URL is required.' });
+  }
+
+  try {
+    console.log(`[Scrape Controller] Initiating PREVIEW scrape for URL: ${url}`);
+    const scrapedCareers = await scrapeCollegeData(url); // Call the scraper service
+
+    if (!scrapedCareers || scrapedCareers.length === 0) {
+      return res.status(200).json({ message: 'Preview scrape completed, but no career data was extracted.', data: [] });
+    }
+
+    // Just return the scraped data without saving to the database
+    res.status(200).json({
+      message: 'Preview scrape completed. Data returned without saving to database.',
+      scrapedCount: scrapedCareers.length,
+      data: scrapedCareers
+    });
+
+  } catch (error) {
+    console.error('[Scrape Controller] Error during preview scrape:', error);
+    res.status(500).json({ message: 'Failed to complete preview scraping process.', error: error.message });
   }
 };
