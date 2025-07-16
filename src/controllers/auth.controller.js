@@ -15,7 +15,7 @@ const signToken = (id) => {
 };
 
 // @desc    Authenticate user with Telegram Widget data and handle profile setup for new users
-// @route   POST /api/auth/telegram-login
+// @route   POST /api/auth/sign-in
 // @access  Public
 export const verifyTelegramUser = async (req, res) => {
   try {

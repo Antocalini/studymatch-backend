@@ -33,7 +33,7 @@ const findOrCreateGroup = async (req, res) => {
     .sort({ createdAt: -1 })
     .lean();
 
-    const MAX_GROUP_SIZE = 10;
+    const MAX_GROUP_SIZE = 5;
     existingGroups = existingGroups.filter(group => group.members.length < MAX_GROUP_SIZE);
 
     if (existingGroups.length > 0) {
