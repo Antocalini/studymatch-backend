@@ -1,140 +1,137 @@
-import crypto from "crypto";
+// src/controllers/auth.controller.js (Updated to use utils)
 import jwt from "jsonwebtoken";
-import { User } from "../models/Users.js";
+import { User } from "../models/Users.js"; // Named import for User
+import Career from "../models/Career.js"; // Import Career model to validate careerId
+import { verifyTelegramHash } from "../utils/telegramAuth.js"; // Import the utility function
+import dotenv from 'dotenv';
 
-// Función para generar JWT token
+dotenv.config();
+
+// Function to generate JWT token (remains here for now, as discussed)
 const signToken = (id) => {
   return jwt.sign({ id }, process.env.JWT_SECRET, {
     expiresIn: process.env.JWT_EXPIRE || "24h",
   });
 };
 
-// Endpoint para verificar y crear usuarios de Telegram
+// @desc    Authenticate user with Telegram Widget data and handle profile setup for new users
+// @route   POST /api/auth/telegram-login
+// @access  Public
 export const verifyTelegramUser = async (req, res) => {
   try {
-    const { first_name, hash, id, photo_url, username } = req.body;
-
-    // Validar que todos los campos requeridos estén presentes
-    if (!first_name || !hash || !id) {
-      return res.status(400).json({
-        success: false,
-        message: "Faltan campos requeridos: first_name, hash, id",
-      });
-    }
-
-    // Verificar el hash de Telegram
-    const isValidTelegramHash = verifyTelegramHash({
+    const {
       first_name,
       hash,
       id,
       photo_url,
       username,
+      careerId,           // New: Expected for new users
+      currentSemesterNumber // New: Expected for new users
+    } = req.body;
+
+    // Validate that required Telegram fields are present
+    if (!first_name || !hash || !id) {
+      return res.status(400).json({
+        success: false,
+        message: "Missing required Telegram data: first_name, hash, id",
+      });
+    }
+
+    // Verify the Telegram hash for data integrity and authenticity using the utility
+    const isValidTelegramHash = verifyTelegramHash({
+      first_name, hash, id, photo_url, username, // Only pass Telegram-related fields for hash verification
+      // Note: careerId and currentSemesterNumber are NOT passed to verifyTelegramHash
+      // as they are not part of Telegram's original hash calculation.
     });
 
     if (!isValidTelegramHash) {
       return res.status(401).json({
         success: false,
-        message: "Hash de Telegram inválido",
+        message: "Invalid Telegram data hash.",
       });
     }
 
-    // Buscar si el usuario ya existe en la base de datos
+    // Search if the user already exists in the database
     let user = await User.findOne({ telegramId: id });
+    let isNewUser = false;
 
     if (user) {
-      // Usuario existe, actualizar información si es necesario
+      // User exists, update information if necessary
       user.first_name = first_name;
       user.username = username || user.username;
       user.photo_url = photo_url || user.photo_url;
       user.lastLogin = new Date();
-
       await user.save();
-
-      // Generar JWT token
-      const token = signToken(user._id);
-
-      return res.status(200).json({
-        success: true,
-        message: "Usuario verificado exitosamente",
-        token,
-        user: {
-          id: user._id,
-          telegramId: user.telegramId,
-          first_name: user.first_name,
-          username: user.username,
-          photo_url: user.photo_url,
-          isNewUser: false,
-        },
-      });
+      console.log(`User ${username} logged in.`);
     } else {
-      // Usuario no existe, crear nuevo usuario
+      // User does not exist, create new user
+      isNewUser = true;
+      let userCareer = null;
+      let userSemester = null;
+
+      // If careerId and currentSemesterNumber are provided for a new user, validate and assign them
+      if (careerId && currentSemesterNumber !== undefined && currentSemesterNumber !== null) {
+        // Validate if careerId exists in your database
+        const existingCareer = await Career.findById(careerId);
+        if (!existingCareer) {
+          return res.status(400).json({
+            success: false,
+            message: "Invalid Career ID provided for new user registration.",
+          });
+        }
+        if (typeof currentSemesterNumber !== 'number' || currentSemesterNumber < 1) {
+            return res.status(400).json({
+                success: false,
+                message: "Current semester number must be a positive number."
+            });
+        }
+        userCareer = careerId;
+        userSemester = currentSemesterNumber;
+      } else {
+        console.log("New user registered without initial career/semester. Will need to set up profile later.");
+      }
+
       user = new User({
         telegramId: id,
         first_name: first_name,
         username: username,
         photo_url: photo_url,
+        career: userCareer,                 // Set if provided and valid
+        currentSemesterNumber: userSemester, // Set if provided and valid
         createdAt: new Date(),
         lastLogin: new Date(),
+        subjectsOfInterest: [], // Initialize empty
+        studyGroups: [] // Initialize empty
       });
-
       await user.save();
-
-      // Generar JWT token
-      const token = signToken(user._id);
-
-      return res.status(201).json({
-        success: true,
-        message: "Usuario creado exitosamente",
-        token,
-        user: {
-          id: user._id,
-          telegramId: user.telegramId,
-          first_name: user.first_name,
-          username: user.username,
-          photo_url: user.photo_url,
-          isNewUser: true,
-        },
-      });
+      console.log(`New user ${username} registered.`);
     }
+
+    // Generate JWT token
+    const token = signToken(user._id);
+
+    return res.status(isNewUser ? 201 : 200).json({
+      success: true,
+      message: isNewUser ? "User created successfully" : "User verified successfully",
+      token,
+      user: {
+        id: user._id,
+        telegramId: user.telegramId,
+        first_name: user.first_name,
+        username: user.username,
+        photo_url: user.photo_url,
+        career: user.career, // Will be the ID
+        currentSemesterNumber: user.currentSemesterNumber,
+        isNewUser: isNewUser,
+      },
+    });
+
   } catch (error) {
-    console.error("Error en verify-telegram-user:", error);
+    console.error("Error in verifyTelegramUser:", error);
     return res.status(500).json({
       success: false,
-      message: "Error interno del servidor",
+      message: "Internal server error during authentication.",
       error: error.message,
     });
   }
 };
-
-// Función para verificar el hash de Telegram
-function verifyTelegramHash(data) {
-  const { hash, ...userData } = data;
-
-  // Crear data_check_string
-  const dataCheckString = Object.keys(userData)
-    .filter((key) => userData[key] !== undefined && userData[key] !== null)
-    .sort()
-    .map((key) => `${key}=${userData[key]}`)
-    .join("\n");
-
-  // Obtener el bot token desde variables de entorno
-  const botToken = process.env.TELEGRAM_BOT_TOKEN;
-  console.log(botToken);
-  if (!botToken) {
-    console.error("TELEGRAM_BOT_TOKEN no está configurado");
-    return false;
-  }
-
-  // Crear secret_key = SHA256(<bot_token>)
-  const secretKey = crypto.createHash("sha256").update(botToken).digest();
-
-  // Crear HMAC_SHA256(data_check_string, secret_key)
-  const hmac = crypto.createHmac("sha256", secretKey);
-  hmac.update(dataCheckString);
-  const calculatedHash = hmac.digest("hex");
-
-  // Comparar con el hash recibido
-  return calculatedHash === hash;
-}
-
-export default verifyTelegramUser;

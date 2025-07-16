@@ -1,55 +1,20 @@
-import mongoose from "mongoose";
+// src/models/Groups.js (Updated)
+import mongoose from 'mongoose';
 
-const groupSchema = new mongoose.Schema(
-  {
-    telegramID: {
-      type: String,
-      required: true,
-      unique: true,
-      trim: true,
-    },
-    name: {
-      type: String,
-      required: true,
-      trim: true,
-    },
-    members: [
-      {
-        type: String,
-        trim: true,
-      },
-    ],
-    telegramLink: {
-      type: String,
-      required: true,
-      trim: true,
-      unique: true,
-    },
-  },
-  {
-    timestamps: true,
-  }
-);
+const GroupsSchema = new mongoose.Schema({
+  name: { type: String, required: true },
+  career: { type: mongoose.Schema.Types.ObjectId, ref: 'Career', required: true },
+  semesterNumber: { type: Number, required: true },
+  subjectName: { type: String, required: true }, // Single subject name
+  members: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }], // Reference the 'User' model
+  telegramChatId: { type: String, unique: true, sparse: true }, // Store as string
+  telegramInviteLink: { type: String, unique: true, sparse: true }, // New: Store the invite link
+  description: { type: String }, // Optional description for the group
+  createdAt: { type: Date, default: Date.now },
+});
 
-groupSchema.index({ telegramID: 1 });
-groupSchema.index({ name: 1 });
+GroupsSchema.index({ career: 1, subjectName: 1, semesterNumber: 1 });
 
-groupSchema.methods.addMember = function (memberID) {
-  if (!this.members.includes(memberID)) {
-    this.members.push(memberID);
-  }
-  return this.save();
-};
+const Group = mongoose.model('Groups', GroupsSchema); // Model name 'Groups'
 
-groupSchema.methods.removeMember = function (memberID) {
-  this.members = this.members.filter((member) => member !== memberID);
-  return this.save();
-};
-
-groupSchema.statics.findByTelegramID = function (telegramID) {
-  return this.findOne({ telegramID });
-};
-
-const Group = mongoose.model("Group", groupSchema);
-
-export default Group;
+export { Group }; // Named export

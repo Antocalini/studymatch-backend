@@ -1,41 +1,36 @@
-import jwt from "jsonwebtoken";
-import { promisify } from "util";
-import { User } from "../models/Users.js";
+// src/middlewares/auth.js
+import jwt from 'jsonwebtoken';
+import { User } from '../models/Users.js'; // Note the .js extension and named import
+import dotenv from 'dotenv';
 
-export const protect = async (req, res, next) => {
-  try {
-    let token;
-    if (req.headers.authorization?.startsWith("Bearer")) {
-      token = req.headers.authorization.split(" ")[1];
+dotenv.config();
+
+const protect = async (req, res, next) => {
+  let token;
+
+  if (req.headers.authorization && req.headers.authorization.startsWith('Bearer')) {
+    try {
+      // Get token from header
+      token = req.headers.authorization.split(' ')[1];
+
+      // Verify token
+      const decoded = jwt.verify(token, process.env.JWT_SECRET);
+
+      // Attach user to the request object (without password field - though not using password here)
+      req.user = await User.findById(decoded.id); // Assuming JWT has 'id'
+      if (!req.user) {
+        return res.status(401).json({ message: 'Not authorized, user not found.' });
+      }
+      next();
+    } catch (error) {
+      console.error('Auth middleware error:', error.message);
+      return res.status(401).json({ message: 'Not authorized, token failed.' });
     }
+  }
 
-    if (!token) {
-      return next(
-        new Error(
-          "No autenticado, por favor inicia sesión para acceder a este recurso"
-        )
-      );
-    }
-
-    const decoded = await promisify(jwt.verify)(token, process.env.JWT_SECRET);
-    const currentUser = await User.findById(decoded.id);
-
-    if (!currentUser) {
-      return next(new Error("Este usuario no existe"));
-    }
-
-    req.user = currentUser;
-    next();
-  } catch (err) {
-    next(err);
+  if (!token) {
+    return res.status(401).json({ message: 'Not authorized, no token.' });
   }
 };
 
-export const restrictTo = (...roles) => {
-  return (req, res, next) => {
-    if (!roles.includes(req.user.role)) {
-      return next(new Error("Acción no permitida"));
-    }
-    next();
-  };
-};
+export { protect };
