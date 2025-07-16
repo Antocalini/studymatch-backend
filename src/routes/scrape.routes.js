@@ -13,6 +13,6 @@ const router = express.Router();
 router.post('/college-data', protect, authorize(['admin']), triggerCollegeDataScrape);
 
 // NEW: Endpoint to trigger scrape and only return data (no DB save)
-router.post('/preview-college-data', protect, authorize(['admin']), previewCollegeDataScrape);
+router.post('/preview-college-data', previewCollegeDataScrape);
 
 export default router;

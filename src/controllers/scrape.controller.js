@@ -1,57 +1,58 @@
-// src/controllers/scrape.controller.js (Updated)
+// src/controllers/scrape.controller.js (Updated for single career handling)
 import { scrapeCollegeData } from '../services/scraper.js';
-import Career from '../models/Career.js'; // Still needed for the other endpoint
+import Career from '../models/Career.js';
 
 // @desc    Trigger the college website scraper and save data to DB
 // @route   POST /api/scrape/college-data
 // @access  Private (Admin only)
 export const triggerCollegeDataScrape = async (req, res) => {
-  const { url } = req.body; // Expect the URL to scrape from the request body
+  const { url, debug } = req.body; // Added debug for direct save trigger if needed
 
   if (!url) {
     return res.status(400).json({ message: 'Scraping URL is required.' });
   }
 
   try {
-    console.log(`[Scrape Controller] Initiating scrape for URL: ${url}`);
-    const scrapedCareers = await scrapeCollegeData(url);
+    console.log(`[Scrape Controller] Initiating scrape for URL: ${url} (Debug mode: ${!!debug})`);
+    const scrapedCareer = await scrapeCollegeData(url, !!debug); // Expect a single career object
 
-    if (!scrapedCareers || scrapedCareers.length === 0) {
-      return res.status(200).json({ message: 'Scraping completed, but no career data was extracted.', data: [] });
+    if (!scrapedCareer) { // Check if a career object was actually returned
+      return res.status(200).json({ message: 'Scraping completed, but no career data was extracted from this URL.', data: null });
     }
 
-    // --- Save scraped data to MongoDB ---
-    const results = [];
-    for (const careerData of scrapedCareers) {
-      try {
-        let existingCareer = await Career.findOne({ name: careerData.name });
+    // --- Save scraped data to MongoDB (for a single career) ---
+    let result = {};
+    try {
+      // Try to find an existing career by name
+      let existingCareer = await Career.findOne({ name: scrapedCareer.name });
 
-        if (existingCareer) {
-          existingCareer.semesters = careerData.semesters;
-          await existingCareer.save();
-          results.push({ name: careerData.name, status: 'updated', id: existingCareer._id });
-          console.log(`[Scrape Controller] Updated existing career: ${careerData.name}`);
-        } else {
-          const newCareer = new Career(careerData);
-          await newCareer.save();
-          results.push({ name: careerData.name, status: 'created', id: newCareer._id });
-          console.log(`[Scrape Controller] Created new career: ${careerData.name}`);
-        }
-      } catch (dbError) {
-        if (dbError.code === 11000) {
-            console.warn(`[Scrape Controller] Duplicate career name found during save: ${careerData.name}. Skipping.`);
-            results.push({ name: careerData.name, status: 'skipped_duplicate' });
-        } else {
-            console.error(`[Scrape Controller] Error saving career ${careerData.name} to DB:`, dbError);
-            results.push({ name: careerData.name, status: 'failed', error: dbError.message });
-        }
+      if (existingCareer) {
+        // If career exists, update its semesters (this will replace the entire semesters array)
+        existingCareer.semesters = scrapedCareer.semesters;
+        await existingCareer.save();
+        result = { name: scrapedCareer.name, status: 'updated', id: existingCareer._id };
+        console.log(`[Scrape Controller] Updated existing career: ${scrapedCareer.name}`);
+      } else {
+        // If career does not exist, create a new one
+        const newCareer = new Career(scrapedCareer);
+        await newCareer.save();
+        result = { name: scrapedCareer.name, status: 'created', id: newCareer._id };
+        console.log(`[Scrape Controller] Created new career: ${scrapedCareer.name}`);
+      }
+    } catch (dbError) {
+      if (dbError.code === 11000) { // Duplicate key error
+          console.warn(`[Scrape Controller] Duplicate career name found during save: ${scrapedCareer.name}. Skipping.`);
+          result = { name: scrapedCareer.name, status: 'skipped_duplicate' };
+      } else {
+          console.error(`[Scrape Controller] Error saving career ${scrapedCareer.name} to DB:`, dbError);
+          result = { name: scrapedCareer.name, status: 'failed', error: dbError.message };
       }
     }
 
     res.status(200).json({
-      message: 'Scraping and database population completed.',
-      scrapedCount: scrapedCareers.length,
-      dbResults: results
+      message: 'Scraping and database population completed for a single career.',
+      scrapedCareerName: scrapedCareer.name,
+      dbResult: result // Return single result
     });
 
   } catch (error) {
@@ -65,25 +66,25 @@ export const triggerCollegeDataScrape = async (req, res) => {
 // @route   POST /api/scrape/preview-college-data
 // @access  Private (Admin only)
 export const previewCollegeDataScrape = async (req, res) => {
-  const { url } = req.body; // Expect the URL to scrape from the request body
+  const { url, debug } = req.body;
 
   if (!url) {
     return res.status(400).json({ message: 'Scraping URL is required.' });
   }
 
   try {
-    console.log(`[Scrape Controller] Initiating PREVIEW scrape for URL: ${url}`);
-    const scrapedCareers = await scrapeCollegeData(url); // Call the scraper service
+    console.log(`[Scrape Controller] Initiating PREVIEW scrape for URL: ${url} (Debug mode: ${!!debug})`);
+    const scrapedCareer = await scrapeCollegeData(url, !!debug); // Expect a single career object
 
-    if (!scrapedCareers || scrapedCareers.length === 0) {
-      return res.status(200).json({ message: 'Preview scrape completed, but no career data was extracted.', data: [] });
+    if (!scrapedCareer) { // Check if a career object was actually returned
+      return res.status(200).json({ message: 'Preview scrape completed, but no career data was extracted from this URL.', data: null });
     }
 
-    // Just return the scraped data without saving to the database
+    // Just return the single scraped career data without saving to the database
     res.status(200).json({
-      message: 'Preview scrape completed. Data returned without saving to database.',
-      scrapedCount: scrapedCareers.length,
-      data: scrapedCareers
+      message: 'Preview scrape completed. Single career data returned without saving to database.',
+      scrapedCareerName: scrapedCareer.name,
+      data: scrapedCareer // Return the single career object
     });
 
   } catch (error) {
