@@ -136,7 +136,7 @@ const joinGroup = async (req, res) => {
       return res.status(400).json({ message: 'You are already a member of this group.' });
     }
 
-    const MAX_GROUP_SIZE = 10;
+    const MAX_GROUP_SIZE = 5;
     if (group.members.length >= MAX_GROUP_SIZE) {
       return res.status(400).json({ message: 'This group is full.' });
     }

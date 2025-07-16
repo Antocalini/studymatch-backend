@@ -1,6 +1,6 @@
 // src/models/Semester.js
 import mongoose from 'mongoose';
-import { SubjectSchema } from './Subject.js'; // Note the .js extension for imports
+import { SubjectSchema } from './Subjects.js'; // Note the .js extension for imports
 
 const SemesterSchema = new mongoose.Schema({
   number: { type: Number, required: true },
