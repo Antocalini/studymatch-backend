@@ -1,8 +1,8 @@
-// src/utils/telegramAuth.js
+// src/utils/telegramAuth.js (No changes needed, it was already correct)
 import crypto from "crypto";
 import dotenv from 'dotenv';
 
-dotenv.config(); // Ensure dotenv is loaded to access TELEGRAM_BOT_TOKEN
+dotenv.config();
 
 /**
  * Verifies the integrity and authenticity of Telegram widget data using the bot token.
@@ -13,7 +13,7 @@ function verifyTelegramHash(data) {
   const { hash, ...userData } = data; // Destructure hash, keep other data
 
   // Reconstruct the data_check_string as per Telegram's guidelines
-  // Filter out any fields that are not part of the original Telegram auth_data hash calculation
+  // Ensure all fields that Telegram uses for hash calculation are listed and sorted
   const fieldsToHash = [
     'auth_date', 'first_name', 'id', 'last_name', 'photo_url', 'username'
   ].sort(); // Ensure consistent order for hashing
