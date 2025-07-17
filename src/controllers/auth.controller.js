@@ -58,8 +58,6 @@ export const verifyTelegramUser = async (req, res) => {
 
     if (user) {
       // User exists, update information if necessary
-      user.first_name = first_name;
-      user.last_name = last_name || user.last_name;
       user.username = username || user.username;
       user.photo_url = photo_url || user.photo_url;
       user.lastLogin = new Date(); // Update lastLogin on every login
