@@ -1,4 +1,5 @@
-// src/controllers/auth.controller.js (Updated to use utils)
+// src/controllers/auth.controller.js (Minor correction for currentSemesterNumber)
+import crypto from "crypto";
 import jwt from "jsonwebtoken";
 import { User } from "../models/Users.js"; // Named import for User
 import Career from "../models/Career.js"; // Import Career model to validate careerId
@@ -9,13 +10,15 @@ dotenv.config();
 
 // Function to generate JWT token (remains here for now, as discussed)
 const signToken = (id) => {
+  // The expiresIn option (e.g., "15m") is handled by jsonwebtoken internally
+  // to calculate the 'exp' claim in the JWT payload.
   return jwt.sign({ id }, process.env.JWT_SECRET, {
-    expiresIn: process.env.JWT_EXPIRE || "24h",
+    expiresIn: process.env.JWT_EXPIRE || "24h", // Ensure JWT_EXPIRE is correctly set in .env
   });
 };
 
 // @desc    Authenticate user with Telegram Widget data and handle profile setup for new users
-// @route   POST /api/auth/sign-in
+// @route   POST /api/auth/telegram-login
 // @access  Public
 export const verifyTelegramUser = async (req, res) => {
   try {
@@ -25,10 +28,10 @@ export const verifyTelegramUser = async (req, res) => {
       id,
       photo_url,
       username,
-        last_name, 
-       auth_date, 
-      careerId,           // New: Expected for new users
-      currentSemesterNumber // New: Expected for new users
+      last_name,
+      auth_date,
+      careerId,
+      currentSemesterNumber // Corrected spelling here
     } = req.body;
 
     // Validate that required Telegram fields are present
@@ -41,13 +44,7 @@ export const verifyTelegramUser = async (req, res) => {
 
     // Verify the Telegram hash for data integrity and authenticity using the utility
     const isValidTelegramHash = verifyTelegramHash({
-      first_name,
-      hash, // The hash from the Telegram data itself
-      id,
-      photo_url,
-      username,
-      last_name, // <--- Pass last_name to the hash verification function
-      auth_date, // <--- CRITICAL: Pass auth_date to the hash verification function
+      first_name, hash, id, photo_url, username, last_name, auth_date
     });
     if (!isValidTelegramHash) {
       return res.status(401).json({
@@ -63,9 +60,10 @@ export const verifyTelegramUser = async (req, res) => {
     if (user) {
       // User exists, update information if necessary
       user.first_name = first_name;
+      user.last_name = last_name || user.last_name;
       user.username = username || user.username;
       user.photo_url = photo_url || user.photo_url;
-      user.lastLogin = new Date();
+      user.lastLogin = new Date(); // Update lastLogin on every login
       await user.save();
       console.log(`User ${username} logged in.`);
     } else {
@@ -74,9 +72,7 @@ export const verifyTelegramUser = async (req, res) => {
       let userCareer = null;
       let userSemester = null;
 
-      // If careerId and currentSemesterNumber are provided for a new user, validate and assign them
       if (careerId && currentSemesterNumber !== undefined && currentSemesterNumber !== null) {
-        // Validate if careerId exists in your database
         const existingCareer = await Career.findById(careerId);
         if (!existingCareer) {
           return res.status(400).json({
@@ -99,14 +95,16 @@ export const verifyTelegramUser = async (req, res) => {
       user = new User({
         telegramId: id,
         first_name: first_name,
+        last_name: last_name || null, // Ensure last_name is set, even if null
         username: username,
-        photo_url: photo_url,
-        career: userCareer,                 // Set if provided and valid
-        currentSemesterNumber: userSemester, // Set if provided and valid
+        photo_url: photo_url || null, // Ensure photo_url is set, even if null
+        career: userCareer,
+        currentSemesterNumber: userSemester, // Corrected spelling here
         createdAt: new Date(),
         lastLogin: new Date(),
-        subjectsOfInterest: [], // Initialize empty
-        studyGroups: [] // Initialize empty
+        role: 'user', // Default role for new users
+        subjectsOfInterest: [],
+        studyGroups: []
       });
       await user.save();
       console.log(`New user ${username} registered.`);
@@ -115,18 +113,25 @@ export const verifyTelegramUser = async (req, res) => {
     // Generate JWT token
     const token = signToken(user._id);
 
+    // Return the FULL user object as defined in your backend's User model
     return res.status(isNewUser ? 201 : 200).json({
       success: true,
       message: isNewUser ? "User created successfully" : "User verified successfully",
       token,
       user: {
-        id: user._id,
+        id: user._id.toString(), // Convert ObjectId to string for frontend
         telegramId: user.telegramId,
         first_name: user.first_name,
+        last_name: user.last_name || null,
         username: user.username,
-        photo_url: user.photo_url,
-        career: user.career, // Will be the ID
-        currentSemesterNumber: user.currentSemesterNumber,
+        photo_url: user.photo_url || null,
+        career: user.career ? user.career.toString() : null, // Convert ObjectId to string
+        currentSemesterNumber: user.currentSemesterNumber || null, // Corrected spelling here
+        role: user.role,
+        subjectsOfInterest: user.subjectsOfInterest || [],
+        studyGroups: user.studyGroups.map(group => group.toString()) || [],
+        createdAt: user.createdAt.toISOString(), // Convert Date to ISO string
+        lastLogin: user.lastLogin.toISOString(), // Convert Date to ISO string
         isNewUser: isNewUser,
       },
     });
