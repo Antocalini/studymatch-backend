@@ -1,31 +1,32 @@
-// src/controllers/groups.controller.js (Modified for no semesterNumber in Group model)
+// src/controllers/groups.controller.js (Updated)
 import { Group } from '../models/Groups.js';
 import { User } from '../models/Users.js';
 import Career from '../models/Career.js';
-import { createTelegramGroup } from '../services/telegram.js';
+import { createTelegramGroup } from '../services/telegram.js'; // Only import createTelegramGroup
 
 // @desc    Find or create a study group for a specific subject
 // @route   POST /api/groups/find-or-create
 // @access  Private (requires JWT auth)
 const findOrCreateGroup = async (req, res) => {
-  // FIX: Removed desiredSemesterNumber from req.body destructuring
-  const { subjectName } = req.body;
+  const { subjectName, desiredSemesterNumber } = req.body;
   const currentUser = req.user;
 
   if (!subjectName) {
     return res.status(400).json({ message: 'Subject name is required.' });
   }
 
-  // Ensure user has a career set
-  if (!currentUser.career) {
-    return res.status(400).json({ message: 'User profile incomplete. Please set your career first.' });
+  if (!currentUser.career || !currentUser.currentSemesterNumber) {
+      return res.status(400).json({ message: 'User profile incomplete. Please set your career and current semester first.' });
   }
 
+  const targetSemester = desiredSemesterNumber || currentUser.currentSemesterNumber;
+
   try {
-    // 1. Search for existing, joinable groups for the user's career and subject
+    // 1. Search for existing, joinable groups
     let existingGroups = await Group.find({
-      career: currentUser.career, // Filter by user's career
+      career: currentUser.career,
       subjectName: subjectName,
+      semesterNumber: targetSemester,
       members: { $ne: currentUser._id } // User not already a member
     })
     .populate('members', 'username first_name last_name')
@@ -37,31 +38,34 @@ const findOrCreateGroup = async (req, res) => {
 
     if (existingGroups.length > 0) {
       // Found existing groups, return them
+      // Include the invite link if available
       return res.status(200).json({
-        message: `Found ${existingGroups.length} existing groups for "${subjectName}".`,
+        message: `Found ${existingGroups.length} existing groups for "${subjectName}" in Semester ${targetSemester}.`,
         groups: existingGroups.map(group => ({
           ...group,
-          telegramInviteLink: group.telegramInviteLink
+          // If you want to only send the link if the user is a member, add conditional logic here.
+          // For now, sending to allow users to see links before joining.
+          // Or you can fetch it only after they confirm joining.
+          telegramInviteLink: group.telegramInviteLink // Include the link in the response
         })),
         action: 'found'
       });
     }
 
     // 2. No suitable groups found, automatically create a new one
-    console.log(`No existing groups for "${subjectName}" in ${currentUser.career}. Creating a new one...`);
+    console.log(`No existing groups for "${subjectName}" (Semester ${targetSemester}) in ${currentUser.career}. Creating a new one...`);
 
     const careerObj = await Career.findById(currentUser.career);
     const careerName = careerObj ? careerObj.name : 'Unknown Career';
 
-    // FIX: Removed semester from groupName
-    const groupName = `Study Group: ${subjectName} (${careerName})`;
+    const groupName = `Study Group: ${subjectName} (${careerName} - Sem ${targetSemester})`;
     const newGroup = new Group({
       name: groupName,
       career: currentUser.career,
-      // FIX: Removed semesterNumber from new Group creation
+      semesterNumber: targetSemester,
       subjectName: subjectName,
       members: [currentUser._id], // Creator is the first member
-      description: `A study group for ${subjectName} in ${careerName}.`
+      description: `A study group for ${subjectName} in ${careerName}, Semester ${targetSemester}.`
     });
 
     // 3. Attempt to create a Telegram Group and get an invite link
@@ -73,13 +77,13 @@ const findOrCreateGroup = async (req, res) => {
 
       if (tgGroupDetails && tgGroupDetails.chatId) {
         telegramChatId = tgGroupDetails.chatId;
-        telegramInviteLink = tgGroupDetails.inviteLink;
+        telegramInviteLink = tgGroupDetails.inviteLink; // Get the invite link
         newGroup.telegramChatId = telegramChatId;
-        newGroup.telegramInviteLink = telegramInviteLink;
+        newGroup.telegramInviteLink = telegramInviteLink; // Save the invite link
         console.log(`Telegram group created: "${groupName}" (ID: ${telegramChatId}, Link: ${telegramInviteLink})`);
       } else {
-        console.warn('createTelegramGroup returned no chat ID, Telegram group might not be created.');
-        telegramErrorOccurred = true;
+         console.warn('createTelegramGroup returned no chat ID, Telegram group might not be created.');
+         telegramErrorOccurred = true;
       }
 
     } catch (telegramError) {
@@ -87,23 +91,25 @@ const findOrCreateGroup = async (req, res) => {
       telegramErrorOccurred = true;
     }
 
-    await newGroup.save();
+    await newGroup.save(); // Save the group with Telegram details
 
+    // Add group to user's studyGroups list
     currentUser.studyGroups.push(newGroup._id);
     await currentUser.save();
 
+    // Return the newly created group with its invite link
     if (telegramErrorOccurred) {
-      res.status(201).json({
-        message: `New group created for "${subjectName}", but Telegram group creation or link generation failed.`,
-        group: newGroup.toObject(),
-        action: 'created_with_telegram_error'
-      });
+        res.status(201).json({
+            message: `New group created for "${subjectName}", but Telegram group creation or link generation failed.`,
+            group: newGroup.toObject(),
+            action: 'created_with_telegram_error'
+        });
     } else {
-      res.status(201).json({
-        message: `New group for "${subjectName}" created successfully and Telegram group linked!`,
-        group: newGroup.toObject(),
-        action: 'created'
-      });
+        res.status(201).json({
+            message: `New group for "${subjectName}" created successfully and Telegram group linked!`,
+            group: newGroup.toObject(),
+            action: 'created'
+        });
     }
 
   } catch (error) {
@@ -112,7 +118,9 @@ const findOrCreateGroup = async (req, res) => {
   }
 };
 
-// joinGroup and getMyGroups remain unchanged as they don't use semesterNumber
+// @desc    Join an existing study group
+// @route   POST /api/groups/join/:groupId
+// @access  Private
 const joinGroup = async (req, res) => {
   const { groupId } = req.params;
   const currentUser = req.user;
@@ -139,9 +147,13 @@ const joinGroup = async (req, res) => {
     currentUser.studyGroups.push(group._id);
     await currentUser.save();
 
+    // REMOVED: No more programmatic adding to Telegram group.
+    // The frontend should now present the `group.telegramInviteLink` to the user
+    // and instruct them to join via that link.
+
     res.status(200).json({
       message: `Successfully joined group "${group.name}".`,
-      group: group.toObject()
+      group: group.toObject() // Return the updated group object, which now contains the invite link
     });
 
   } catch (error) {
@@ -150,6 +162,9 @@ const joinGroup = async (req, res) => {
   }
 };
 
+// @desc    Get groups a user is part of
+// @route   GET /api/groups/my-groups
+// @access  Private
 const getMyGroups = async (req, res) => {
   try {
     const user = await User.findById(req.user._id).populate({
@@ -174,13 +189,9 @@ const getMyGroups = async (req, res) => {
   }
 };
 
-// IMPORTANT: The getSubjectsByCareer endpoint that was previously in groups.controller.js
-// and used Group.distinct('subjectName') is NOT what you want for the dropdown.
-// You want subjects from the Career model. So, we will NOT include it here.
-// We will continue to use the one from src/controllers/subject.controller.js.
 
 export {
   findOrCreateGroup,
   joinGroup,
-  getMyGroups,
+  getMyGroups
 };
