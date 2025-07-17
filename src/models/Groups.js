@@ -4,7 +4,6 @@ import mongoose from 'mongoose';
 const GroupsSchema = new mongoose.Schema({
   name: { type: String, required: true },
   career: { type: mongoose.Schema.Types.ObjectId, ref: 'Career', required: true },
-  semesterNumber: { type: Number, required: true },
   subjectName: { type: String, required: true }, // Single subject name
   members: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }], // Reference the 'User' model
   telegramChatId: { type: String, unique: true, sparse: true }, // Store as string
@@ -13,7 +12,7 @@ const GroupsSchema = new mongoose.Schema({
   createdAt: { type: Date, default: Date.now },
 });
 
-GroupsSchema.index({ career: 1, subjectName: 1, semesterNumber: 1 });
+GroupsSchema.index({ career: 1, subjectName: 1 });
 
 const Group = mongoose.model('Groups', GroupsSchema); // Model name 'Groups'
 

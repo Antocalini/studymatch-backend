@@ -8,7 +8,7 @@ import { createTelegramGroup } from '../services/telegram.js'; // Only import cr
 // @route   POST /api/groups/find-or-create
 // @access  Private (requires JWT auth)
 const findOrCreateGroup = async (req, res) => {
-  const { subjectName, desiredSemesterNumber } = req.body;
+  const { subjectName } = req.body;
   const currentUser = req.user;
 
   if (!subjectName) {
@@ -19,14 +19,12 @@ const findOrCreateGroup = async (req, res) => {
       return res.status(400).json({ message: 'User profile incomplete. Please set your career and current semester first.' });
   }
 
-  const targetSemester = desiredSemesterNumber || currentUser.currentSemesterNumber;
 
   try {
     // 1. Search for existing, joinable groups
     let existingGroups = await Group.find({
       career: currentUser.career,
       subjectName: subjectName,
-      semesterNumber: targetSemester,
       members: { $ne: currentUser._id } // User not already a member
     })
     .populate('members', 'username first_name last_name')
@@ -40,7 +38,7 @@ const findOrCreateGroup = async (req, res) => {
       // Found existing groups, return them
       // Include the invite link if available
       return res.status(200).json({
-        message: `Found ${existingGroups.length} existing groups for "${subjectName}" in Semester ${targetSemester}.`,
+        message: `Found ${existingGroups.length} existing groups for "${subjectName}".`,
         groups: existingGroups.map(group => ({
           ...group,
           // If you want to only send the link if the user is a member, add conditional logic here.
@@ -53,19 +51,18 @@ const findOrCreateGroup = async (req, res) => {
     }
 
     // 2. No suitable groups found, automatically create a new one
-    console.log(`No existing groups for "${subjectName}" (Semester ${targetSemester}) in ${currentUser.career}. Creating a new one...`);
+    console.log(`No existing groups for "${subjectName}" in ${currentUser.career}. Creating a new one...`);
 
     const careerObj = await Career.findById(currentUser.career);
     const careerName = careerObj ? careerObj.name : 'Unknown Career';
 
-    const groupName = `Study Group: ${subjectName} (${careerName} - Sem ${targetSemester})`;
+    const groupName = `Study Group: ${subjectName} (${careerName})`;
     const newGroup = new Group({
       name: groupName,
       career: currentUser.career,
-      semesterNumber: targetSemester,
       subjectName: subjectName,
       members: [currentUser._id], // Creator is the first member
-      description: `A study group for ${subjectName} in ${careerName}, Semester ${targetSemester}.`
+      description: `A study group for ${subjectName} in ${careerName}..`
     });
 
     // 3. Attempt to create a Telegram Group and get an invite link
