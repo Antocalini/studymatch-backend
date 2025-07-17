@@ -1,5 +1,4 @@
 // src/controllers/auth.controller.js (Minor correction for currentSemesterNumber)
-import crypto from "crypto";
 import jwt from "jsonwebtoken";
 import { User } from "../models/Users.js"; // Named import for User
 import Career from "../models/Career.js"; // Import Career model to validate careerId
