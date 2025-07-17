@@ -5,6 +5,8 @@ import groupsRoutes from './groups.routes.js'; // Note the .js extension
 import userRoutes from './user.routes.js'; // Note the .js extension
 import careerRoutes from './career.routes.js';
 import scrapeRoutes from './scrape.routes.js'; // NEW: Import scrape routes
+import subjectRoutes from './subject.routes.js'; // NEW: Import scrape routes
+
 
 const router = express.Router();
 
@@ -14,6 +16,8 @@ router.use('/groups', groupsRoutes);
 router.use('/users', userRoutes);
 router.use('/careers', careerRoutes);
 router.use('/scrape', scrapeRoutes); // NEW: Mount scrape routes
+router.use('/subjects', subjectRoutes); // NEW: Mount subject routes under /subjects
+
 
 
 // You can add more routes here for other resources if needed
