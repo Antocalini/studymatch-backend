@@ -25,25 +25,30 @@ export const verifyTelegramUser = async (req, res) => {
       id,
       photo_url,
       username,
+        last_name, 
+       auth_date, 
       careerId,           // New: Expected for new users
       currentSemesterNumber // New: Expected for new users
     } = req.body;
 
     // Validate that required Telegram fields are present
-    if (!first_name || !hash || !id) {
+    if (!first_name || !hash || !id || auth_date === undefined || auth_date === null) {
       return res.status(400).json({
         success: false,
-        message: "Missing required Telegram data: first_name, hash, id",
+        message: "Missing required Telegram data: first_name, hash, id, auth_date",
       });
     }
 
     // Verify the Telegram hash for data integrity and authenticity using the utility
     const isValidTelegramHash = verifyTelegramHash({
-      first_name, hash, id, photo_url, username, // Only pass Telegram-related fields for hash verification
-      // Note: careerId and currentSemesterNumber are NOT passed to verifyTelegramHash
-      // as they are not part of Telegram's original hash calculation.
+      first_name,
+      hash, // The hash from the Telegram data itself
+      id,
+      photo_url,
+      username,
+      last_name, // <--- Pass last_name to the hash verification function
+      auth_date, // <--- CRITICAL: Pass auth_date to the hash verification function
     });
-
     if (!isValidTelegramHash) {
       return res.status(401).json({
         success: false,
