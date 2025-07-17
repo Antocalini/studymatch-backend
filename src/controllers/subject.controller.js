@@ -1,30 +1,28 @@
-// src/controllers/subject.controller.js
+// src/controllers/subject.controller.js (MODIFIED)
 import Career from '../models/Career.js'; // Note the .js extension
 
-// @desc    Get all unique subject names for a given career
+// @desc    Get a career's detailed structure including semesters and subjects
 // @route   GET /api/subjects/career/:careerId
-// @access  Private (or Public, depending on whether you want unauthenticated users to see subjects)
+// @access  Private
 const getSubjectsByCareer = async (req, res) => {
   const { careerId } = req.params;
 
   try {
+    // Fetch the entire career document, which includes embedded semesters and subjects
     const career = await Career.findById(careerId);
     if (!career) {
       return res.status(404).json({ message: 'Career not found.' });
     }
 
-    // Use flatMap to get all subjects from all semesters, then a Set for uniqueness
-    const allSubjectNames = career.semesters.flatMap(sem =>
-      sem.subjects.map(sub => sub.name)
-    );
-
+    // Return the career object with its full structure
+    // Frontend will then process this to display by semester
     res.status(200).json({
-      message: `Subjects for career '${career.name}' retrieved successfully.`,
-      subjects: [...new Set(allSubjectNames)] // Ensure unique subject names
+      message: `Career structure for '${career.name}' retrieved successfully.`,
+      career: career // Return the full career object
     });
   } catch (error) {
-    console.error('Error fetching subjects by career:', error.message);
-    res.status(500).json({ message: 'Server error fetching subjects.' });
+    console.error('Error fetching career subjects by ID:', error.message);
+    res.status(500).json({ message: 'Server error fetching career subjects.' });
   }
 };
 
