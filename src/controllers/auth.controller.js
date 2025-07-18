@@ -29,8 +29,6 @@ export const verifyTelegramUser = async (req, res) => {
       username,
       last_name,
       auth_date,
-      careerId,
-      currentSemesterNumber // Corrected spelling here
     } = req.body;
 
     // Validate that required Telegram fields are present
@@ -66,28 +64,6 @@ export const verifyTelegramUser = async (req, res) => {
     } else {
       // User does not exist, create new user
       isNewUser = true;
-      let userCareer = null;
-      let userSemester = null;
-
-      if (careerId && currentSemesterNumber !== undefined && currentSemesterNumber !== null) {
-        const existingCareer = await Career.findById(careerId);
-        if (!existingCareer) {
-          return res.status(400).json({
-            success: false,
-            message: "Invalid Career ID provided for new user registration.",
-          });
-        }
-        if (typeof currentSemesterNumber !== 'number' || currentSemesterNumber < 1) {
-            return res.status(400).json({
-                success: false,
-                message: "Current semester number must be a positive number."
-            });
-        }
-        userCareer = careerId;
-        userSemester = currentSemesterNumber;
-      } else {
-        console.log("New user registered without initial career/semester. Will need to set up profile later.");
-      }
 
       user = new User({
         telegramId: id,
@@ -95,8 +71,8 @@ export const verifyTelegramUser = async (req, res) => {
         last_name: last_name || null, // Ensure last_name is set, even if null
         username: username,
         photo_url: photo_url || null, // Ensure photo_url is set, even if null
-        career: userCareer,
-        currentSemesterNumber: userSemester, // Corrected spelling here
+        career: null,
+        currentSemesterNumber: null, // Corrected spelling here
         createdAt: new Date(),
         lastLogin: new Date(),
         role: 'user', // Default role for new users
