@@ -62,7 +62,7 @@ const findOrCreateGroup = async (req, res) => {
       career: currentUser.career,
       subjectName: subjectName,
       members: [currentUser._id], // Creator is the first member
-      description: `A study group for ${subjectName} in ${careerName}..`
+      description: `Grupo de estudio para ${subjectName} en ${careerName}..`
     });
 
     // 3. Attempt to create a Telegram Group and get an invite link
