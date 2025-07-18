@@ -1,6 +1,6 @@
 // src/routes/user.routes.js
 import express from 'express';
-import { getMe, setupUserProfile, updateSubjectsOfInterest } from '../controllers/user.controller.js'; // Note the .js extension
+import { getMe, setupUserProfile, updateSubjectsOfInterest, getUserCount } from '../controllers/user.controller.js'; // Note the .js extension
 import { getSubjectsByCareer } from '../controllers/subject.controller.js'; // Named import
 import { protect } from '../middlewares/auth.js'; // Note the .js extension
 
@@ -12,6 +12,8 @@ router.put('/me/interests', protect, updateSubjectsOfInterest);
 
 // Route for fetching subjects for a career
 router.get('/careers/:careerId/subjects', protect, getSubjectsByCareer);
+
+router.get('/count', getUserCount); // NEW: Route for user count
 
 
 export default router;

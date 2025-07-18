@@ -1,6 +1,6 @@
 // src/routes/groups.routes.js
 import express from 'express';
-import { findOrCreateGroup, joinGroup, getMyGroups } from '../controllers/groups.controller.js'; // Note the .js extension
+import { findOrCreateGroup, joinGroup, getMyGroups, getGroupCount } from '../controllers/groups.controller.js'; // Note the .js extension
 import { protect } from '../middlewares/auth.js'; // Note the .js extension
 
 const router = express.Router();
@@ -8,6 +8,9 @@ const router = express.Router();
 router.post('/find-or-create', protect, findOrCreateGroup);
 router.post('/join/:groupId', protect, joinGroup);
 router.get('/my-groups', protect, getMyGroups);
+
+router.get('/count', getGroupCount); // NEW: Route for group count
+
 
 
 export default router;

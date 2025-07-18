@@ -100,9 +100,23 @@ const updateSubjectsOfInterest = async (req, res) => {
   }
 };
 
+// @desc    Get total count of active users
+// @route   GET /api/users/count
+// @access  Public (or Private)
+const getUserCount = async (req, res) => {
+  try {
+    const userCount = await User.countDocuments({}); // Count all documents in the User collection
+    res.status(200).json({ count: userCount });
+  } catch (error) {
+    console.error('Error fetching user count:', error.message);
+    res.status(500).json({ message: 'Server error fetching user count.' });
+  }
+};
+
 
 export {
   getMe,
   setupUserProfile,
-  updateSubjectsOfInterest
+  updateSubjectsOfInterest,
+  getUserCount
 };

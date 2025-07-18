@@ -173,9 +173,23 @@ const getMyGroups = async (req, res) => {
   }
 };
 
+// @desc    Get total count of study groups
+// @route   GET /api/groups/count
+// @access  Public (or Private)
+const getGroupCount = async (req, res) => {
+  try {
+    const groupCount = await Group.countDocuments({}); // Count all documents in the Group collection
+    res.status(200).json({ count: groupCount });
+  } catch (error) {
+    console.error('Error fetching group count:', error.message);
+    res.status(500).json({ message: 'Server error fetching group count.' });
+  }
+};
+
 
 export {
   findOrCreateGroup,
   joinGroup,
-  getMyGroups
+  getMyGroups,
+  getGroupCount
 };
